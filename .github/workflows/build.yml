@@ -1,0 +1,40 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate the app voice pack (neural voice, bundled inside the APK)
+        continue-on-error: true
+        run: |
+          pip install edge-tts
+          python tool/make_voice_pack.py
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Create Android platform files
+        run: flutter create --platforms=android --org com.voicechess --project-name voice_chess .
+      - name: Patch Android manifest (mic, internet, speech recognition)
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="android.permission.INTERNET"/>\n    <application#' $M
+          sed -i 's#<queries>#<queries>\n        <intent><action android:name="android.speech.RecognitionService"/></intent>#' $M
+          sed -i 's#android:label="voice_chess"#android:label="شطرنج صوتي"#' $M
+      - run: flutter pub get
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-chess-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
