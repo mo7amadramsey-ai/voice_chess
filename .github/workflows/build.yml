@@ -38,7 +38,19 @@ jobs:
       - run: flutter pub get
       - name: Voice-command brain tests
         run: dart run tool/parser_check.dart
-      - run: flutter build apk --release
+      - name: Build release APK
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build.log
+      - name: Publish build log on failure
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: buildlog-${{ github.run_number }}
+          name: build log ${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          files: build.log
       - name: Name the APK
         run: cp build/app/outputs/flutter-apk/app-release.apk voice-chess.apk
       - uses: actions/upload-artifact@v4
