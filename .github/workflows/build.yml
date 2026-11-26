@@ -36,6 +36,16 @@ jobs:
           sed -i 's#<queries>#<queries>\n        <intent><action android:name="android.speech.RecognitionService"/></intent>#' $M
           sed -i 's#android:label="voice_chess"#android:label="شطرنج صوتي"#' $M
       - run: flutter pub get
+      - name: Patch stockfish plugin for modern Gradle (jcenter removed)
+        run: |
+          PKG=$(ls -d "$HOME"/.pub-cache/hosted/pub.dev/stockfish-*/ | head -1)
+          F="$PKG/android/build.gradle"
+          sed -i 's/jcenter()/mavenCentral()/g' "$F"
+          if ! grep -q namespace "$F"; then
+            NS=$(grep -o 'package="[^"]*"' "$PKG/android/src/main/AndroidManifest.xml" | head -1 | cut -d'"' -f2)
+            sed -i "0,/android {/s//android {\n    namespace '$NS'/" "$F"
+          fi
+          echo "----- patched $F"; cat "$F"
       - name: Voice-command brain tests
         run: dart run tool/parser_check.dart
       - name: Build release APK
