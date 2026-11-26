@@ -25,7 +25,7 @@ class GameController extends ChangeNotifier {
 
   LegalMove? _confirm;
   bool _busy = false;
-  int _gen = 0;
+  int _gen = 0, _speaking = 0;
   SharedPreferences? _p;
 
   String get lang => speaker.lang;
@@ -38,6 +38,7 @@ class GameController extends ChangeNotifier {
     humanWhite = _p!.getBool('white') ?? true;
     speaker.lang = _p!.getString('lang') ?? 'ar';
     soundOn = _p!.getBool('sound') ?? true;
+    listener.offlineOnly = _p!.getBool('offline') ?? true;
     try {
       await engine.init();
     } catch (_) {
@@ -46,6 +47,11 @@ class GameController extends ChangeNotifier {
       return;
     }
     listener.onFinal = handleSpeech;
+    listener.isComplete = _commitable;
+    listener.onOfflineMissing = () {
+      banner = 'حزمة الصوت دون إنترنت غير مثبّتة — ثبّتها من إعدادات لغة Google';
+      notifyListeners();
+    };
     listener.onPartial = (t) {
       heard = t;
       notifyListeners();
@@ -128,16 +134,40 @@ class GameController extends ChangeNotifier {
 
   Future<void> _say(List<String> ids) async {
     if (!soundOn) return;
-    if (voiceOn) await listener.pause();
-    await speaker.say(ids);
-    if (voiceOn) await listener.resume();
+    if (voiceOn && _speaking == 0) await listener.pause();
+    _speaking++;
+    try {
+      await speaker.say(ids);
+    } finally {
+      _speaking--;
+      if (_speaking == 0 && voiceOn) await listener.resume();
+    }
+  }
+
+  /// True when a partial transcript is already a complete, safe-to-run command.
+  bool _commitable(String t) {
+    final p = CommandParser.parse(t, _legal());
+    if (p is PCommand) {
+      if (p.cmd == Cmd.yes || p.cmd == Cmd.no) return _confirm != null;
+      if (p.cmd == Cmd.level) return false; // digits may still be coming
+      if (p.cmd == Cmd.newGame) return p.arg != null;
+      return true;
+    }
+    if (p is PMove) return !p.confirm && humanTurn && !_busy && !over;
+    return false;
   }
 
   Future<void> _humanPlay(LegalMove m, {required bool announce}) async {
     if (!_apply(m)) return;
-    if (announce) await _say(moveClips(m.san));
-    if (await _checkEnd(humanMoved: true)) return;
-    await _engineTurn();
+    final said = announce ? _say(moveClips(m.san)) : Future<void>.value();
+    final ended = _checkEnd(humanMoved: true); // state is set synchronously
+    if (over) {
+      await said;
+      await ended;
+      return;
+    }
+    await _engineTurn(); // thinks while the voice is still speaking
+    await said;
   }
 
   Future<bool> _checkEnd({required bool humanMoved}) async {
@@ -172,6 +202,7 @@ class GameController extends ChangeNotifier {
     thinking = true;
     banner = 'المحرك يفكّر…';
     notifyListeners();
+    LegalMove? played;
     try {
       final uci = await engine.think(game.fen, level);
       if (gen != _gen || uci == null || uci.length < 4) return;
@@ -180,16 +211,21 @@ class GameController extends ChangeNotifier {
       final cand = _legal().where((m) => m.from == from && m.to == to).toList();
       if (cand.isEmpty) return;
       final m = cand.firstWhere((x) => promo == null || x.promo == promo, orElse: () => cand.first);
-      thinking = false;
       if (!_apply(m)) return;
-      banner = 'لعب المحرك ${m.san}';
-      notifyListeners();
-      await _say(moveClips(m.san));
-      if (await _checkEnd(humanMoved: false)) return;
-      banner = 'دورك';
+      played = m;
     } finally {
       _busy = false;
       thinking = false;
+      notifyListeners();
+    }
+    if (played == null) return;
+    banner = 'لعب المحرك ${played.san}';
+    notifyListeners();
+    final said = _say(moveClips(played.san));
+    final ended = _checkEnd(humanMoved: false);
+    await said;
+    if (!await ended && !over) {
+      banner = 'دورك';
       notifyListeners();
     }
   }
@@ -204,6 +240,7 @@ class GameController extends ChangeNotifier {
     if (white != null) humanWhite = white;
     _p?.setBool('white', humanWhite);
     game.reset();
+    engine.newGame();
     sans.clear();
     lastFrom = lastTo = selected = null;
     over = false;
@@ -275,6 +312,17 @@ class GameController extends ChangeNotifier {
 
   void flip() {
     flipped = !flipped;
+    notifyListeners();
+  }
+
+  Future<void> toggleOffline() async {
+    listener.offlineOnly = !listener.offlineOnly;
+    listener.offlineMissing = false;
+    _p?.setBool('offline', listener.offlineOnly);
+    if (voiceOn) {
+      await listener.stop();
+      await listener.start();
+    }
     notifyListeners();
   }
 

@@ -137,12 +137,14 @@ class _GameScreenState extends State<GameScreen> {
             icon: const Icon(Icons.tune),
             onSelected: (v) {
               if (v == 'sound') c.toggleSound();
+              if (v == 'offline') c.toggleOffline();
               if (v == 'ar' || v == 'en') c.setLang(v);
               if (v == 'resign') c.resign();
             },
             itemBuilder: (_) => [
               PopupMenuItem(value: 'sound', child: Text(c.soundOn ? 'كتم الصوت' : 'تشغيل الصوت')),
               PopupMenuItem(value: c.lang == 'ar' ? 'en' : 'ar', child: Text(c.lang == 'ar' ? 'English voice + listening' : 'العربية: صوت واستماع')),
+              PopupMenuItem(value: 'offline', child: Text(c.listener.offlineOnly ? 'التعرّف دون إنترنت: مفعّل ✓' : 'التعرّف دون إنترنت: متوقف')),
               const PopupMenuItem(value: 'resign', child: Text('استسلام')),
             ],
           ),

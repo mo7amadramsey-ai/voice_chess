@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:stockfish/stockfish.dart';
 import 'levels.dart';
@@ -31,6 +32,16 @@ class EngineService {
       if (++waited > 150) throw StateError('Stockfish did not start');
     }
     _send('uci');
+    final cores = Platform.numberOfProcessors;
+    _send('setoption name Threads value ${(cores - 1).clamp(1, 4)}');
+    _send('setoption name Hash value 64');
+    _send('isready');
+  }
+
+  /// Clears the transposition table between games.
+  void newGame() {
+    stop();
+    _send('ucinewgame');
     _send('isready');
   }
 
@@ -87,6 +98,7 @@ class EngineService {
       _send('stop');
       return '';
     });
+    _done = null;
     if (best.isEmpty || best == '(none)') return null;
     return lv.weak ? _humanize(best, lv) : best;
   }

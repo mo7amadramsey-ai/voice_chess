@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,9 +17,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Generate the app voice pack (neural voice, bundled inside the APK)
-        continue-on-error: true
+      - name: Voice pack (neural voice, mastered, bundled inside the APK)
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg espeak-ng
           pip install edge-tts
           python tool/make_voice_pack.py
       - uses: subosito/flutter-action@v2
@@ -26,15 +29,26 @@ jobs:
           cache: true
       - name: Create Android platform files
         run: flutter create --platforms=android --org com.voicechess --project-name voice_chess .
-      - name: Patch Android manifest (mic, internet, speech recognition)
+      - name: Patch Android manifest (microphone + speech recognition service; NO internet permission)
         run: |
           M=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="android.permission.INTERNET"/>\n    <application#' $M
+          sed -i 's#<application#<uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <application#' $M
           sed -i 's#<queries>#<queries>\n        <intent><action android:name="android.speech.RecognitionService"/></intent>#' $M
           sed -i 's#android:label="voice_chess"#android:label="شطرنج صوتي"#' $M
       - run: flutter pub get
+      - name: Voice-command brain tests
+        run: dart run tool/parser_check.dart
       - run: flutter build apk --release
+      - name: Name the APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk voice-chess.apk
       - uses: actions/upload-artifact@v4
         with:
           name: voice-chess-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: voice-chess.apk
+      - name: Publish release (direct download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.${{ github.run_number }}
+          name: شطرنج صوتي v0.2.${{ github.run_number }}
+          files: voice-chess.apk
+          make_latest: true

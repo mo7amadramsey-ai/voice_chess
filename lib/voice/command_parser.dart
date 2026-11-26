@@ -150,8 +150,16 @@ _Scan _scan(String s) {
   final squares = <String>[];
   String? pendingFile;
   final pcs = <(int, String)>[];
-  for (final t in s.split(' ')) {
-    final a = _atom(t);
+  final toks = s.split(' ');
+  const ambiguous = {'to', 'too', 'for', 'ate'};
+  for (var i = 0; i < toks.length; i++) {
+    final t = toks[i];
+    var a = _atom(t);
+    if (a != null && a.kind == 'rank' && ambiguous.contains(t) && i + 1 < toks.length) {
+      // "knight c to e4": 'to' is a preposition when a file/piece word follows
+      final next = _atom(toks[i + 1]);
+      if (next != null && next.kind != 'rank') a = null;
+    }
     if (a == null) {
       pendingFile = null;
       continue;

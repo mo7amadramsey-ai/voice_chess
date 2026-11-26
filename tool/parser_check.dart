@@ -1,4 +1,5 @@
 // Run: dart tool/parser_check.dart   (pure Dart, no Flutter needed)
+import 'dart:io';
 import '../lib/voice/command_parser.dart';
 
 LegalMove mv(String san, String from, String to) =>
@@ -54,6 +55,9 @@ void main() {
   check('تبييت قصير', (p) => san(p, 'O-O'), 'O-O');
   check('castle long', (p) => san(p, 'O-O-O'), 'O-O-O');
   check('تبييت', (p) => p is PAmbiguous, 'ambiguous castle');
+  check('knight c to e4', (p) => san(p, 'Nce4'), 'Nce4 ("to" is not rank 2)');
+  check('bishop f to c4', (p) => san(p, 'Bc4'), 'Bc4');
+  check('e to e4', (p) => san(p, 'e4'), 'e4');
   check('b8 وزير', (p) => san(p, 'b8=Q'), 'b8=Q');
   check('b8 knight', (p) => san(p, 'b8=N'), 'b8=N');
   check('b8', (p) => san(p, 'b8=Q'), 'default queen');
@@ -76,4 +80,5 @@ void main() {
   check('blah blah', (p) => p is PUnknown, 'unknown');
 
   print('${total - fails}/$total passed');
+  if (fails > 0) exit(1);
 }
